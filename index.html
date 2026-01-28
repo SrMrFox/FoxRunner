@@ -1,0 +1,586 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fox Runner</title>
+
+<style>
+body{font-family:system-ui,Arial;display:flex;justify-content:center;margin:0;background:#f6f6f6}
+.wrap{width:760px;padding:18px}
+
+#hud{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;font-size:16px;gap:12px;flex-wrap:wrap}
+#hud .left{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+#hud .right{display:flex;gap:8px;align-items:center}
+
+#game{background:#fff;border:2px solid #222;border-radius:12px;width:100%;height:220px;position:relative;overflow:hidden}
+
+#ground{
+  position:absolute;left:0;right:0;bottom:0;height:36px;border-top:2px solid #222;
+  background:repeating-linear-gradient(90deg,transparent 0 18px,rgba(0,0,0,.08) 18px 19px)
+}
+
+.sprite{image-rendering:pixelated;image-rendering:crisp-edges;user-select:none;pointer-events:none;display:block}
+
+#fox{position:absolute;left:70px;bottom:36px;width:72px;height:60px;transform-origin:bottom left;z-index:2}
+#fox img{width:100%;height:100%}
+#fox.jump{transform:rotate(-10deg)}
+
+.enemy{position:absolute;bottom:36px;z-index:1}
+.enemy img{width:100%;height:100%}
+.enemy.cactus{width:48px;height:80px}
+.enemy.stone{width:64px;height:48px}
+.enemy.bird{width:64px;height:36px;bottom:68px}
+
+.overlay{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);z-index:10}
+.overlay.show{display:flex}
+
+.panel{background:#fff;border:2px solid #222;border-radius:14px;padding:16px;text-align:center;width:300px}
+.panel h2{margin:0 0 10px;font-size:20px}
+.panel p{margin:6px 0;font-size:14px}
+
+.btn{
+  padding:7px 12px;border:2px solid #222;border-radius:10px;background:#fff;cursor:pointer;margin:6px;
+  font-weight:600;font-size:14px
+}
+.btn:active{transform:translateY(1px)}
+.btn.small{padding:6px 10px;margin:0;font-size:13px}
+.btn.wide{min-width:200px}
+.btn.disabled{opacity:.45;pointer-events:none}
+
+.shopList{display:flex;flex-direction:column;gap:8px;margin-top:8px}
+.shopRow{
+  display:flex;justify-content:space-between;align-items:center;
+  border:2px solid #222;border-radius:12px;padding:8px 10px;font-size:13px;text-align:left;
+}
+.shopRow .meta{opacity:.85;font-size:12px}
+
+.shopTop{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.badge{display:inline-block;border:2px solid #222;border-radius:999px;padding:2px 8px;font-size:12px;font-weight:700}
+
+hr{border:0;border-top:2px solid #222;margin:10px 0}
+#leaderboard{margin:0;padding-left:18px;text-align:left;font-size:13px;max-height:140px;overflow:auto}
+</style>
+</head>
+
+<body>
+<div class="wrap">
+  <div id="hud">
+    <div class="left">
+      <span>Pontos: <b id="score">0</b></span>
+      <span>Fase: <b id="level">1</b></span>
+      <span>Desafios: <b id="challenges">0</b>/20</span>
+      <span>Moedas: <b id="coins">0</b></span>
+      <span class="badge">🛡️ <span id="hudShield">0</span></span>
+      <span class="badge">❤️ <span id="hudLife">0</span></span>
+    </div>
+    <div class="right">
+      <button class="btn small" id="btnShop">Loja (L)</button>
+      <span>⏸️ P / Esc</span>
+    </div>
+  </div>
+
+  <div id="game">
+    <div id="fox"><img class="sprite" src="imagens/fox.png" alt=""></div>
+    <div id="ground"></div>
+
+    <!-- PAUSA -->
+    <div id="pauseOverlay" class="overlay">
+      <div class="panel">
+        <h2>⏸️ Pausado</h2>
+        <button class="btn wide" id="btnResume">Continuar</button><br>
+        <button class="btn wide" id="btnRestartPause">Reiniciar run</button>
+        <p><small>Enter = continuar</small></p>
+      </div>
+    </div>
+
+    <!-- LOJA -->
+    <div id="shopOverlay" class="overlay">
+      <div class="panel">
+        <div class="shopTop">
+          <h2 style="margin:0">🛒 Loja</h2>
+          <span class="badge">Moedas: <span id="shopCoins">0</span></span>
+        </div>
+
+        <div class="shopList">
+          <div class="shopRow">
+            <div>
+              <b>🛡️ Escudo</b>
+              <div class="meta">Aguenta 1 hit (some ao usar)</div>
+            </div>
+            <button class="btn small" id="buyShield">Comprar (10)</button>
+          </div>
+
+          <div class="shopRow">
+            <div>
+              <b>🐢 Slow Motion</b>
+              <div class="meta">Abrandar 5s</div>
+            </div>
+            <button class="btn small" id="buySlow">Comprar (12)</button>
+          </div>
+
+          <div class="shopRow">
+            <div>
+              <b>❤️ Vida extra</b>
+              <div class="meta">Revive 1 vez</div>
+            </div>
+            <button class="btn small" id="buyLife">Comprar (20)</button>
+          </div>
+        </div>
+
+        <button class="btn wide" id="btnCloseShop">Fechar (Esc)</button>
+        <p><small>L abre/fecha a loja</small></p>
+      </div>
+    </div>
+
+    <!-- GAME OVER + RECORDES LOCAIS -->
+    <div id="gameOverOverlay" class="overlay">
+      <div class="panel">
+        <h2>Game Over</h2>
+        <p>Pontos: <span id="finalScore"></span></p>
+        <p>Fase: <span id="finalLevel"></span></p>
+        <p>Moedas: <span id="finalCoins"></span></p>
+
+        <hr>
+
+        <h2 style="font-size:18px;margin:0 0 8px">🏆 Recordes (Top 10)</h2>
+        <ol id="leaderboard"></ol>
+        <button class="btn wide" id="btnClearScores">Limpar recordes</button>
+
+        <button class="btn wide" id="btnRestart">Jogar de novo</button>
+        <p><small>Enter = jogar de novo</small></p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ===== ELEMENTOS ===== */
+const game = document.getElementById("game");
+const fox = document.getElementById("fox");
+
+const scoreEl = document.getElementById("score");
+const levelEl = document.getElementById("level");
+const challengesEl = document.getElementById("challenges");
+const coinsEl = document.getElementById("coins");
+
+const hudShield = document.getElementById("hudShield");
+const hudLife = document.getElementById("hudLife");
+
+const pauseOverlay = document.getElementById("pauseOverlay");
+const shopOverlay = document.getElementById("shopOverlay");
+const gameOverOverlay = document.getElementById("gameOverOverlay");
+
+const btnResume = document.getElementById("btnResume");
+const btnRestart = document.getElementById("btnRestart");
+const btnRestartPause = document.getElementById("btnRestartPause");
+
+const btnShop = document.getElementById("btnShop");
+const btnCloseShop = document.getElementById("btnCloseShop");
+const shopCoins = document.getElementById("shopCoins");
+const buyShield = document.getElementById("buyShield");
+const buySlow = document.getElementById("buySlow");
+const buyLife = document.getElementById("buyLife");
+
+const finalScore = document.getElementById("finalScore");
+const finalLevel = document.getElementById("finalLevel");
+const finalCoins = document.getElementById("finalCoins");
+
+const leaderboardEl = document.getElementById("leaderboard");
+const btnClearScores = document.getElementById("btnClearScores");
+
+/* ===== HITBOX ===== */
+const HITBOX = {
+  fox: { stand:{x:18,y:22,w:36,h:28}, crouch:{x:16,y:20,w:40,h:18} }, // ✅ corrigido
+  cactus: {x:18,y:8,w:18,h:64},
+  stone:  {x:12,y:14,w:40,h:26},
+  bird:   {x:12,y:18,w:40,h:14}
+};
+function getHitbox(el,c){
+  const r = el.getBoundingClientRect();
+  return { left:r.left+c.x, top:r.top+c.y, right:r.left+c.x+c.w, bottom:r.top+c.y+c.h };
+}
+function overlap(a,b){
+  return !(a.right<b.left||a.left>b.right||a.bottom<b.top||a.top>b.bottom);
+}
+
+/* ===== SAVE COINS ===== */
+const SAVE_KEY = "foxRunner_save_v1";
+function loadSave(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    if(!raw) return { coins:0 };
+    const s = JSON.parse(raw);
+    return { coins: Number(s.coins)||0 };
+  }catch{ return { coins:0 }; }
+}
+function saveCoins(){
+  localStorage.setItem(SAVE_KEY, JSON.stringify({ coins }));
+}
+
+/* ===== LEADERBOARD (LOCAL) ===== */
+const LEADER_KEY = "foxRunner_leaderboard_v1";
+
+function loadLeaderboard(){
+  try{
+    const raw = localStorage.getItem(LEADER_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch{
+    return [];
+  }
+}
+function saveLeaderboard(list){
+  localStorage.setItem(LEADER_KEY, JSON.stringify(list));
+}
+function addToLeaderboard(newScore){
+  const list = loadLeaderboard();
+  list.push({ score: Number(newScore)||0, date: Date.now() });
+  list.sort((a,b)=>b.score-a.score);
+  const top10 = list.slice(0,10);
+  saveLeaderboard(top10);
+  return top10;
+}
+function renderLeaderboard(list){
+  leaderboardEl.innerHTML = "";
+  if(!list.length){
+    const li = document.createElement("li");
+    li.textContent = "Sem recordes ainda";
+    leaderboardEl.appendChild(li);
+    return;
+  }
+  for(const item of list){
+    const li = document.createElement("li");
+    const d = new Date(item.date);
+    li.textContent = `${item.score} pts — ${d.toLocaleDateString("pt-PT")}`;
+    leaderboardEl.appendChild(li);
+  }
+}
+btnClearScores.addEventListener("click", ()=>{
+  localStorage.removeItem(LEADER_KEY);
+  renderLeaderboard([]);
+});
+
+/* ===== ESTADO ===== */
+let obstacles=[];
+let speed=300,spawnTimer=0;
+let score=0,level=1,nextLevel=100;
+let running=true,paused=false,shopOpen=false;
+let last=performance.now();
+
+/* desafios/moedas */
+let challenges=0;
+let coins=loadSave().coins;
+
+/* upgrades por run */
+let shield=0;
+let extraLife=0;
+let slowUntil=0;
+
+/* física */
+let y=0,vy=0;
+const gravity=1600,jumpV=620;
+const COYOTE=.12,BUFFER=.12,CUT=.45;
+let coyoteT=0,bufferT=0;
+
+/* agachar */
+let crouching=false,downHeld=false;
+function applyCrouch(on){
+  crouching=on;
+  fox.style.height=on?"40px":"60px";
+}
+
+/* HUD */
+function refreshHUD(){
+  coinsEl.textContent=coins;
+  challengesEl.textContent=challenges;
+  hudShield.textContent=shield;
+  hudLife.textContent=extraLife;
+  shopCoins.textContent=coins;
+}
+refreshHUD();
+
+/* spawn */
+function createEnemy(type,gap=80){
+  const el=document.createElement("div");
+  el.className="enemy "+type;
+  const img=document.createElement("img");
+  img.src="imagens/"+type+".png";
+  img.className="sprite";
+  img.alt="";
+  el.appendChild(img);
+  game.appendChild(el);
+  obstacles.push({el,x:game.clientWidth+gap,type});
+  el.style.left=(game.clientWidth+gap)+"px";
+}
+function spawnEnemy(){
+  let type="cactus";
+  if(level>=5 && Math.random()<.3) type="stone";
+  else if(level>=3 && Math.random()<.4) type="bird";
+  createEnemy(type);
+  if(type==="bird" && level>=4 && Math.random()<.4){
+    setTimeout(()=>{ if(running && !paused) createEnemy("bird",150); }, 280);
+  }
+}
+
+/* desafios -> moedas */
+function addChallenge(){
+  challenges++;
+  if(challenges>=20){
+    challenges=0;
+    coins+=5;
+    saveCoins();
+  }
+  refreshHUD();
+}
+
+/* pausa/loja */
+function pauseGame(){
+  if(!running) return;
+  paused=true;
+  pauseOverlay.classList.add("show");
+  btnResume.focus();
+}
+function resumeGame(){
+  paused=false;
+  pauseOverlay.classList.remove("show");
+  last=performance.now();
+  requestAnimationFrame(tick);
+}
+function openShop(){
+  if(!running) return;
+  shopOpen=true;
+  paused=true;
+  shopOverlay.classList.add("show");
+  refreshHUD();
+  btnCloseShop.focus();
+  updateShopButtons();
+}
+function closeShop(){
+  shopOpen=false;
+  shopOverlay.classList.remove("show");
+  paused=false;
+  last=performance.now();
+  requestAnimationFrame(tick);
+}
+
+/* loja */
+const COST={shield:10,slow:12,life:20};
+function canBuy(cost){return coins>=cost}
+function updateShopButtons(){
+  buyShield.classList.toggle("disabled",!canBuy(COST.shield));
+  buySlow.classList.toggle("disabled",!canBuy(COST.slow));
+  buyLife.classList.toggle("disabled",!canBuy(COST.life));
+}
+buyShield.onclick=()=>{
+  if(!canBuy(COST.shield)) return;
+  coins-=COST.shield;
+  shield+=1;
+  saveCoins();
+  refreshHUD();
+  updateShopButtons();
+};
+buySlow.onclick=()=>{
+  if(!canBuy(COST.slow)) return;
+  coins-=COST.slow;
+  slowUntil=Math.max(slowUntil,performance.now())+5000;
+  saveCoins();
+  refreshHUD();
+  updateShopButtons();
+};
+buyLife.onclick=()=>{
+  if(!canBuy(COST.life)) return;
+  coins-=COST.life;
+  extraLife+=1;
+  saveCoins();
+  refreshHUD();
+  updateShopButtons();
+};
+
+btnShop.onclick=()=>{shopOpen?closeShop():openShop()};
+btnCloseShop.onclick=()=>closeShop();
+
+/* reset/game over */
+function resetRunOnly(){
+  document.querySelectorAll(".enemy").forEach(el=>el.remove());
+  obstacles=[];
+  speed=300;spawnTimer=0;
+  score=0;level=1;nextLevel=100;
+  challenges=0;
+  y=0;vy=0;coyoteT=0;bufferT=0;
+  downHeld=false;applyCrouch(false);
+  shield=0;extraLife=0;slowUntil=0;
+  running=true;paused=false;shopOpen=false;
+  pauseOverlay.classList.remove("show");
+  shopOverlay.classList.remove("show");
+  gameOverOverlay.classList.remove("show");
+  scoreEl.textContent="0";
+  levelEl.textContent="1";
+  refreshHUD();
+  last=performance.now();
+  requestAnimationFrame(tick);
+}
+
+function gameOver(){
+  running=false;
+  paused=true;          // deixa parado no overlay
+  shopOpen=false;
+  pauseOverlay.classList.remove("show");
+  shopOverlay.classList.remove("show");
+
+  gameOverOverlay.classList.add("show");
+  const final = Math.floor(score);
+  finalScore.textContent=final;
+  finalLevel.textContent=level;
+  finalCoins.textContent=coins;
+
+  // ✅ atualiza placar
+  const top10 = addToLeaderboard(final);
+  renderLeaderboard(top10);
+
+  btnRestart.focus();
+}
+
+/* loop */
+function tick(now){
+  if(!running || paused) return;
+
+  const dt=Math.min(.033,(now-last)/1000);
+  last=now;
+
+  const slowActive = performance.now() < slowUntil;
+  const speedMul = slowActive ? 0.65 : 1.0;
+
+  score+=dt*10;
+  scoreEl.textContent=Math.floor(score);
+
+  if(score>=nextLevel){
+    level++;
+    speed+=70;
+    nextLevel+= (level<4)?100:200;
+    levelEl.textContent=level;
+  }
+
+  if(bufferT>0) bufferT-=dt;
+  if(coyoteT>0) coyoteT-=dt;
+
+  vy-=gravity*dt;
+  y+=vy*dt;
+
+  if(y<=0){
+    y=0;
+    if(vy<0) vy=0;
+    coyoteT=COYOTE;
+    applyCrouch(downHeld);
+  }
+
+  if(bufferT>0 && coyoteT>0 && !crouching){
+    vy=jumpV;
+    bufferT=0;
+    coyoteT=0;
+  }
+
+  fox.style.bottom=(36+y)+"px";
+  y>0?fox.classList.add("jump"):fox.classList.remove("jump");
+
+  spawnTimer+=dt;
+  if(spawnTimer>=Math.max(.6,1.3-level*.1)){
+    spawnTimer=0;
+    spawnEnemy();
+  }
+
+  const rFox=getHitbox(fox,crouching?HITBOX.fox.crouch:HITBOX.fox.stand);
+
+  obstacles = obstacles.filter(o=>{
+    o.x -= (speed*speedMul)*dt;
+    o.el.style.left=o.x+"px";
+    const rE=getHitbox(o.el,HITBOX[o.type]);
+
+    if(overlap(rFox,rE)){
+      if(shield>0){
+        shield--;
+        o.el.remove();
+        refreshHUD();
+        return false;
+      }
+      if(extraLife>0){
+        extraLife--;
+        o.el.remove();
+        refreshHUD();
+        if(y===0) vy = jumpV*0.65;
+        return false;
+      }
+      o.el.remove();
+      gameOver();
+      return false;
+    }
+
+    if(o.x < -220){
+      o.el.remove();
+      addChallenge();
+      return false;
+    }
+    return true;
+  });
+
+  requestAnimationFrame(tick);
+}
+
+/* input */
+window.addEventListener("keydown",e=>{
+  if(e.code==="KeyL" && running){
+    shopOpen?closeShop():openShop();
+    return;
+  }
+  if(e.code==="Escape" && shopOpen){
+    closeShop();
+    return;
+  }
+
+  if((e.code==="KeyP"||e.code==="Escape") && running && !shopOpen){
+    paused?resumeGame():pauseGame();
+    return;
+  }
+
+  if(e.code==="Enter" && gameOverOverlay.classList.contains("show")){
+    btnRestart.click();
+    return;
+  }
+  if(e.code==="Enter" && pauseOverlay.classList.contains("show")){
+    btnResume.click();
+    return;
+  }
+
+  if(!running || paused) return;
+  if(e.repeat) return;
+
+  if(e.code==="Space"||e.code==="ArrowUp"){
+    bufferT=BUFFER;
+  }
+  if(e.code==="ArrowDown"){
+    downHeld=true;
+    if(y===0) applyCrouch(true);
+  }
+});
+
+window.addEventListener("keyup",e=>{
+  if(e.code==="ArrowDown"){
+    downHeld=false;
+    if(y===0) applyCrouch(false);
+  }
+  if((e.code==="Space"||e.code==="ArrowUp") && vy>0){
+    vy*=CUT;
+  }
+});
+
+/* botões */
+btnResume.onclick=()=>resumeGame();
+btnRestart.onclick=()=>resetRunOnly();
+btnRestartPause.onclick=()=>resetRunOnly();
+
+/* inicia */
+resetRunOnly();
+renderLeaderboard(loadLeaderboard()); // mostra quando abrir pela 1ª vez
+</script>
+</body>
+</html>
